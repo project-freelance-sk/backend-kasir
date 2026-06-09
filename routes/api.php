@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/test-cicd', function () {
     return "sukses";
-})
+});
 
 Route::prefix('auth')->group(function () {
     $loginMiddleware = app()->environment('testing') ? [] : ['throttle:10,1'];
