@@ -12,7 +12,9 @@ use App\Http\Controllers\Api\TransactionController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/test-cicd', function () {
-    return "sukses";
+    return response()->json([
+        'status' => 'cicd done'
+    ]);
 });
 
 Route::prefix('auth')->group(function () {
