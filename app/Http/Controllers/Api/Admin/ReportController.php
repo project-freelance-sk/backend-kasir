@@ -49,21 +49,38 @@ class ReportController extends Controller
                 'revenue' => (float) $row->revenue,
             ]);
 
-        $byCashier = (clone $baseQuery)
+        $byCashierRows = (clone $baseQuery)
             ->join('users', 'users.id', '=', 'transactions.cashier_id')
             ->selectRaw('
+                users.id as cashier_id,
                 users.name as cashier_name,
-                COUNT(*) as transactions,
-                COALESCE(SUM(transactions.total), 0) as revenue
+                COUNT(transactions.id) as transactions,
+                COALESCE(SUM(transactions.total), 0) as revenue,
+                COALESCE(SUM(CASE WHEN transactions.payment_method = \'cash\' THEN transactions.total ELSE 0 END), 0) as cash_revenue,
+                COALESCE(SUM(CASE WHEN transactions.payment_method = \'qris\' THEN transactions.total ELSE 0 END), 0) as qris_revenue
             ')
             ->groupBy('users.id', 'users.name')
             ->orderByDesc('revenue')
-            ->get()
-            ->map(fn($row) => [
-                'cashier_name' => $row->cashier_name,
-                'transactions' => (int) $row->transactions,
-                'revenue' => (float) $row->revenue,
-            ]);
+            ->get();
+
+        $itemsByCashier = DB::table('transaction_details')
+            ->join('transactions', 'transactions.id', '=', 'transaction_details.transaction_id')
+            ->join('users', 'users.id', '=', 'transactions.cashier_id')
+            ->where('transactions.payment_status', 'paid')
+            ->whereBetween('transactions.created_at', [$from, $to])
+            ->groupBy('users.id')
+            ->selectRaw('users.id as cashier_id, COALESCE(SUM(transaction_details.qty), 0) as items_sold')
+            ->pluck('items_sold', 'cashier_id');
+
+        $byCashier = $byCashierRows->map(fn($row) => [
+            'cashier_name' => $row->cashier_name,
+            'transactions' => (int) $row->transactions,
+            'revenue' => (float) $row->revenue,
+            'items_sold' => (int) ($itemsByCashier[$row->cashier_id] ?? 0),
+            'cash_revenue' => (float) $row->cash_revenue,
+            'qris_revenue' => (float) $row->qris_revenue,
+            'card_revenue' => 0,
+        ]);
 
         $topProducts = DB::table('transaction_details')
             ->join(
@@ -136,6 +153,7 @@ class ReportController extends Controller
 
         $from = ($request->date('from') ?? now()->startOfMonth())->startOfDay();
         $to = ($request->date('to') ?? now())->endOfDay();
+        $paymentStatus = $validated['payment_status'] ?? 'paid';
 
         $transactions = Transactions::query()
             ->with([
@@ -145,13 +163,7 @@ class ReportController extends Controller
                 'details.detailToppings.topping',
             ])
             ->whereBetween('transactions.created_at', [$from, $to])
-            ->when(
-                $request->filled('payment_status'),
-                fn($q) => $q->where(
-                    'transactions.payment_status',
-                    $validated['payment_status']
-                )
-            )
+            ->where('transactions.payment_status', $paymentStatus)
             ->when(
                 $request->filled('payment_method'),
                 fn($q) => $q->where(

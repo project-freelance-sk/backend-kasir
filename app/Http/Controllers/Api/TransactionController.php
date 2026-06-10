@@ -58,6 +58,9 @@ class TransactionController extends Controller
 
         if ($request->filled('payment_status')) {
             $query->where('payment_status', $validated['payment_status']);
+        } elseif ($request->filled('from') || $request->filled('to')) {
+            // Rentang tanggal = konteks laporan; hanya hitung transaksi lunas.
+            $query->where('payment_status', 'paid');
         }
 
         $transactions = $query->paginate($request->integer('per_page', 15));
