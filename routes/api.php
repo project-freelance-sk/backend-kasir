@@ -11,6 +11,12 @@ use App\Http\Controllers\Api\MenuController;
 use App\Http\Controllers\Api\TransactionController;
 use Illuminate\Support\Facades\Route;
 
+Route::get('/test-cicd', function () {
+    return response()->json([
+        'status' => 'cicd done'
+    ]);
+});
+
 Route::prefix('auth')->group(function () {
     $loginMiddleware = app()->environment('testing') ? [] : ['throttle:10,1'];
 
